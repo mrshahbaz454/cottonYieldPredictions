@@ -1,0 +1,131 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+# Load the sample CSV file
+file_path = '/content/drive/MyDrive/Cotton_Data_New/bahawalnagar_2021.csv'
+data = pd.read_csv(file_path)
+
+# Display the first few rows of the dataframe to understand the data
+print(data.head())
+
+# Display general information about the dataframe, including null values
+print(data.info())
+
+
+# Path to your files, adjust it according to your Google Drive structure
+path = '/content/drive/MyDrive/Cotton_Data_New'
+
+# Initialize an empty DataFrame
+df = pd.DataFrame()
+
+# Loop through each year and load the corresponding file
+for year in range(1999, 2022):  # Adjust the range according to your data
+    file_path = f'{path}bahawalnagar_{year}.csv'
+    year_data = pd.read_csv(file_path)
+    df = pd.concat([df, year_data], ignore_index=True)
+
+# Check the combined data
+df
+
+
+# List of years and their corresponding missing months you identified
+missing_data_info = {
+    1999: [5, 6, 9],
+    2011: [7],
+    2003: [6],
+    2002: [6],
+    2001: [7, 9],
+
+
+
+}
+
+# Function to fill missing data
+def fill_missing_months(data, year, months_missing):
+    year_data = data[data['year'] == year]
+    numeric_cols = year_data.select_dtypes(include=[np.number]).columns.tolist()
+    mean_values = year_data[numeric_cols].mean()
+
+    for month in months_missing:
+        mask = (year_data['month'] == month) & (year_data['NDVI_mean'].isna())
+        if mask.any():
+            data.loc[(data['year'] == year) & (data['month'] == month), numeric_cols] = data.loc[(data['year'] == year) & (data['month'] == month), numeric_cols].fillna(mean_values)
+
+# Apply the function to each year with missing months
+for year, months in missing_data_info.items():
+    fill_missing_months(df, year, months)
+
+# Verify the results
+print(df[df['year'].isin(missing_data_info.keys())])
+
+
+df
+
+
+# Ensure 'year' is an integer if it's not already
+df['year'] = df['year'].astype(int)
+
+# Map the ground truth areas to a new column 'area_gt'
+df['area_gt'] = df['year'].map(ground_truth_areas)
+df['bale'] = 13.68
+
+
+
+print(df[['year', 'area_gt']])
+
+
+
+# Load the dataset
+#data = pd.read_csv('/content/drive/MyDrive/final_dataset.csv')
+
+# Selecting spectral index columns (mean, min, max) and the target column 'yield'
+
+df = df.groupby(['district', 'year']).mean().reset_index()
+print(df.head())
+
+index_features = [col for col in df.columns if any(metric in col for metric in ['mean', 'min', 'max', 'gt', 'acer', 'bale'])]
+features = df[index_features]
+target = df['yield']
+
+print("Selected Features for Modeling:")
+print(features.head())
+
+target.head()
+
+
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42, shuffle=True)
+print("Training Set Size:", X_train.shape)
+print("Testing Set Size:", X_test.shape)
+
+
+
+# Initialize the linear regression model
+model = LinearRegression()
+
+# Train the model on the training set
+model.fit(X_train, y_train)
+
+
+# Predict on the testing set
+y_pred = model.predict(X_test)
+
+
+
+
+# Calculate RMSE
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+
+print("RMSE on Testing Set:", rmse)
+
+
+
