@@ -7,5 +7,4 @@ Javascript code in 3 files for Google Earth Engine
 3. landsetDataCollection
 
 
-ML python code file for ML and DL models training and validation for Google collab
-
+upload cottonEstimation.iy
