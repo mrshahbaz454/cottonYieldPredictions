@@ -1,0 +1,275 @@
+var all_districts = ee.FeatureCollection("users/boundriesfilelink"),
+    imageVisParam = {"opacity":1,"bands":["NDVI"],"min":-0.010210210457444191,"max":0.8691415190696716,"palette":["0000ff","ffffff","008000"]},
+    landsat = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2");
+
+
+var districts = all_districts.filter(ee.Filter.eq('PROVINCE', 'PUNJAB'));
+print(districts)
+
+print(districts.size())
+
+// 1. Load the districts shapefile and select a specific district
+var district = districts.filter(ee.Filter.eq('DISTRICT', 'BAHAWALNAGAR'));
+
+print(district)
+
+// Center MAP on the district
+
+Map.centerObject(district, 8);
+Map.addLayer(district, {}, 'Selected District');
+
+
+
+
+function maskL7sr(image) {
+  var qaPixel = image.select('QA_PIXEL');
+
+  // Simple cloud and cloud shadow mask using the QA_PIXEL band for Landsat 7
+  var mask = qaPixel.bitwiseAnd(parseInt('11111', 2)).eq(0); // Adjusted for Landsat 7
+
+  // Apply the mask
+  var maskedImage = image.updateMask(mask);
+
+  // Select and rename bands to a standard naming convention
+  var renamedImage = maskedImage.select(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7'], // Landsat 7 SR band names
+                                        ['B1', 'B2', 'B3', 'B4', 'B5', 'B7']); // Renamed for consistency
+
+  return renamedImage;
+}
+
+
+///// end here ////////////////
+
+
+
+
+// 2. Load lansat-7 data for the cotton growing season
+var landsatCollection = landsat.filter(ee.Filter.date('2003-07-10', '2003-09-10'))
+//.filter(ee.Filter.lt('CLOUD_COVER', 20)) 
+  .filter(ee.Filter.bounds(district))
+  .map(maskL7sr);
+
+
+  
+print(landsatCollection)
+
+
+var landsatCollection = landsatCollection.sort('CLOUD_COVER').limit(8)
+
+
+  
+print(landsatCollection)
+
+
+
+
+
+function addVegetationIndices(image) {
+    var NDVI = image.normalizedDifference(['B4', 'B3']).rename('NDVI');
+    var EVI = image.expression(
+        '2.5 * ((NIR - RED) / (NIR + 6 * RED - 7.5 * BLUE + 1))', {
+          'NIR': image.select('B4'),
+          'RED': image.select('B3'),
+          'BLUE': image.select('B1') // Landsat 7 does not have a coastal aerosol band, using blue band as approximation
+        }).rename('EVI');
+    var GNDVI = image.normalizedDifference(['B4', 'B2']).rename('GNDVI');
+    var SAVI = image.expression(
+        '((NIR - RED) / (NIR + RED + L)) * (1 + L)', {
+          'NIR': image.select('B4'),
+          'RED': image.select('B3'),
+          'L': 0.5 // L factor for SAVI, commonly 0.5
+        }).rename('SAVI');
+    var NDMI = image.normalizedDifference(['B4', 'B5']).rename('NDMI'); // Using SWIR1 (B5 in Landsat 7) for moisture content
+    var NDBI = image.normalizedDifference(['B5', 'B4']).rename('NDBI'); // Using SWIR1 (B5) and NIR (B4)
+    var NBR = image.normalizedDifference(['B4', 'B7']).rename('NBR'); // Using NIR (B4) and SWIR2 (B7)
+    var NDWI = image.normalizedDifference(['B4', 'B5']).rename('NDWI'); 
+
+    // Adding additional soil and water-related indices
+    var MSI = image.select('B5').divide(image.select('B4')).rename('MSI'); // Moisture Stress Index
+
+   var SBI = image.expression(
+    '(SWIR1 + RED) / 2', {
+      'SWIR1': image.select('B5'), 
+      'RED': image.select('B3') 
+    }).rename('SBI');
+    
+   var ARVI = image.expression(
+    '(NIR - (RED - gamma * (RED - BLUE))) / (NIR + (RED - gamma * (RED - BLUE)))', {
+      'NIR': image.select('B4'), 
+      'RED': image.select('B3'), 
+      'BLUE': image.select('B1'), 
+      'gamma': 0.5
+    }).rename('ARVI');
+    
+
+   var NDSI = image.normalizedDifference(['B2', 'B5']).rename('NDSI'); 
+  
+   var NDTI = image.normalizedDifference(['B7', 'B4']).rename('NDTI'); 
+   var PSRI = image.expression(
+    '(RED - GREEN) / NIR', {
+      'RED': image.select('B3'), 
+      'GREEN': image.select('B2'), 
+      'NIR': image.select('B4') 
+    }).rename('PSRI');
+  
+  // Some indices like those requiring the Cirrus band or the Coastal/Aerosol band cannot be directly calculated for Landsat 7.
+  return image.addBands([SBI, ARVI , NDSI, NDTI, PSRI, NDVI, EVI, GNDVI, SAVI, NDMI, NDBI, NBR, NDWI, MSI]);
+  
+    
+}
+
+
+
+//////// indices end here /////////
+
+
+
+
+
+/// adding bands to images //////
+
+var withIndices = landsatCollection.map(addVegetationIndices);
+
+
+// Mask for cotton using NDVI and EVI thresholds note: it is just filtering for minus evi vals or too greater vals
+
+// var cottonMask = function(image) {
+//   return image.updateMask(image.select('NDVI').gt(0.6).and(image.select('EVI').gt(0)).and(image.select('EVI').lt(1)));
+// };
+
+var eviMask = function(image) {
+  return image.updateMask(image.select('EVI').gt(0).and(image.select('EVI').lt(1)));
+};
+
+
+var eviFilteredCollection = withIndices.map(eviMask);
+
+///////   cotton masking ends here /////////
+
+
+
+// 5. Calculate the area of cotton pixels for an example image (let's say the latest image in the collection)
+// ... previous code ...
+
+// 5. Calculate the area of cotton pixels for an example image (let's say the latest image in the collection)
+// Debugging: Print the size of the image collection after processing
+
+
+
+var latestImage = eviFilteredCollection.mean();
+
+print('latest image', latestImage);
+
+
+
+
+var ndviThreshold = ee.Image.constant(0.061505119086399114);
+var eviThreshold = ee.Image.constant(0.2402167820181975);
+var saviThreshold = ee.Image.constant(0.06738461194297467);
+
+
+var cottonArea = ee.Image.pixelArea()
+
+            .updateMask(latestImage.select('NDVI').gt(ndviThreshold)
+            .and(latestImage.select('EVI').gt(eviThreshold)
+            .and(latestImage.select('SAVI').gt(saviThreshold))))
+            .reduceRegion({
+                          reducer: ee.Reducer.sum(),
+                          geometry: district.geometry(),
+                          scale: 30,  // Adjust scale based on your needs
+                          maxPixels: 1e13
+              
+            });
+
+var cottonAreaInSquareMeters = ee.Number(cottonArea.get('area'));
+var cottonAreaInAcres = cottonAreaInSquareMeters.divide(4046.86);  // Conversion from square meters to acres
+
+print('cotton area in square meters:', cottonAreaInSquareMeters);
+print('cotton area in acres:', cottonAreaInAcres);
+
+
+ 
+ 
+ var cottonMask = function(image) {
+  return image.updateMask(image.select('NDVI').gt(ndviThreshold)
+            .and(image.select('EVI').gt(eviThreshold)
+            .and(image.select('SAVI').gt(saviThreshold))));
+};
+
+
+
+
+
+
+
+
+var startDate = '2003-05-01';
+var endDate = '2003-09-30';
+
+var months = ee.List.sequence(0, 4); // for May to September
+
+var monthlyMeanMinMax = months.map(function(m) {
+    m = ee.Number(m);
+    var start = ee.Date(startDate).advance(m, 'month');
+    var end = start.advance(1, 'month');
+    
+var monthlyCollection = landsat
+        .filterDate(start, end)
+        .filterBounds(district)
+        //.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', .99))
+        .map(maskL7sr)
+        .map(addVegetationIndices)
+        .map(eviMask)
+        .map(cottonMask); 
+    
+    var meanImage = monthlyCollection.mean();
+    var minImage = monthlyCollection.min();
+    var maxImage = monthlyCollection.max();
+    
+    // Combine the reducers
+    var reducers = ee.Reducer.mean().combine({
+                      reducer2: ee.Reducer.minMax(),
+                      sharedInputs: true
+                  });
+    
+    // Apply the reducers to get statistics
+    var stats = meanImage.reduceRegion({
+        reducer: reducers,
+        geometry: district,
+        scale: 30,
+        maxPixels: 1e13,
+        tileScale: 4,
+        bestEffort: true
+    });
+
+    return ee.Feature(null, stats)
+          .set('month', start.format('MM')) 
+          .set('year', '2003')
+          .set('district', 'bahawalnagar')
+          .set('area',428608.6869809837)
+          .set('muand_acer_avg', 544.45  )
+          .set('yield', 16.95 );
+});
+
+var featureCollection = ee.FeatureCollection(monthlyMeanMinMax);
+
+Export.table.toDrive({
+    collection: featureCollection,
+    description: 'bahawalnagar_2003',
+    fileFormat: 'CSV',
+    selectors: ['district','year', 'month', 'NDVI_mean', 'NDVI_min', 'NDVI_max', 
+                'EVI_mean', 'EVI_min', 'EVI_max',
+                'GNDVI_mean', 'GNDVI_min', 'GNDVI_max',
+                'SAVI_mean', 'SAVI_min', 'SAVI_max',
+                'NDMI_mean', 'NDMI_min', 'NDMI_max',
+                'NDBI_mean', 'NDBI_min', 'NDBI_max',
+                'NBR_mean', 'NBR_min', 'NBR_max','muand_acer_avg', 'area', 'yield',
+                 'NDWI_mean', 'NDWI_min', 'NDWI_max',
+                'MSI_mean', 'MSI_min', 'MSI_max',
+                'SBI_mean', 'SBI_min', 'SBI_max',
+                'ARVI_mean', 'ARVI_min', 'ARVI_max',
+                'NDSI_mean', 'NDSI_min', 'NDSI_max',
+                'NDTI_mean', 'NDTI_min', 'NDTI_max',
+                'PSRI_mean', 'PSRI_min', 'PSRI_max',
+                'avg_muand/acer', 'yield'  // Assuming 'muand_acer_avg' is another metric you're interested in]
+});
