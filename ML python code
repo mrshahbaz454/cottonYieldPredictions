@@ -128,4 +128,175 @@ rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 print("RMSE on Testing Set:", rmse)
 
 
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.svm import SVR
+from sklearn.metrics import mean_squared_error,mean_absolute_error
+import numpy as np
 
+# Initialize models
+dt_regressor = DecisionTreeRegressor(random_state=42)
+rf_regressor = RandomForestRegressor(random_state=42)
+gb_regressor = GradientBoostingRegressor(random_state=42)
+svr_regressor = SVR(kernel='rbf')
+
+# List of models
+models = [
+    ("Decision Tree Regressor", dt_regressor),
+    ("Random Forest Regressor", rf_regressor),
+    ("Gradient Boosting Regressor", gb_regressor),
+    ("Support Vector Regression", svr_regressor)
+]
+
+# Train and evaluate models
+results = []
+for name, model in models:
+    model.fit(X_train, y_train)  # Train model
+    y_pred = model.predict(X_test)  # Predict on test set
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mae = mean_absolute_error(y_test, y_pred)
+    results.append((name, rmse, mae))
+
+# Display results
+for result in results:
+    print(f"{result[0]} - RMSE: {result[1]} - MAE: {result[2]}")
+
+
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.svm import SVR
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.preprocessing import StandardScaler
+
+
+
+param_grid_dt = {
+    'max_depth': [None, 50, 70, 100],
+    'min_samples_split': [8, 10, 12],
+    'min_samples_leaf': [1, 2, 3]
+}
+
+param_grid_rf = {
+    'n_estimators': [150, 200, 250],
+    'max_depth': [None, 50, 70],
+    'min_samples_split': [3, 5, 7],
+    'min_samples_leaf': [1, 2]
+}
+
+param_grid_gb = {
+    'n_estimators': [250, 300, 350],
+    'learning_rate': [0.01, 0.05, 0.1],
+    'max_depth': [5, 7, 9],
+    'min_samples_split': [2, 3],
+    'min_samples_leaf': [1, 2]
+}
+
+param_grid_svr = {
+    'C': [50, 100, 150],
+    'gamma': ['scale', 'auto'],
+    'kernel': ['rbf', 'poly']
+}
+
+# Models setup
+models = {
+    # "Decision Tree": (DecisionTreeRegressor(random_state=42), param_grid_dt),
+     "Random Forest": (RandomForestRegressor(random_state=42), param_grid_rf),
+    # "Gradient Boosting": (GradientBoostingRegressor(random_state=42), param_grid_gb),
+    # "SVR": (SVR(), param_grid_svr)
+}
+
+# Run grid search and evaluate each model
+results = {}
+for model_name, (model, params) in models.items():
+    grid_search = GridSearchCV(model, params, cv=5, scoring='neg_mean_squared_error', verbose=1, n_jobs=-1)
+    grid_search.fit(X_train, y_train)
+    best_model = grid_search.best_estimator_
+    y_pred = best_model.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+    results[model_name] = (grid_search.best_params_, mae, rmse, r2)
+
+# Print results for each model
+for model_name, (best_params, mae, rmse, r2) in results.items():
+    print(f"{model_name} - Best Parameters: {best_params}")
+    print(f"MAE: {mae}, RMSE: {rmse}, R²: {r2}\n")
+
+
+
+from tensorflow.keras.losses import Huber
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+
+# Define the model
+model = Sequential([
+    Dense(128, activation='relu', input_dim=X_train.shape[1]),
+    Dense(64, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(1)
+])
+
+
+from tensorflow.keras.callbacks import EarlyStopping
+
+# Define the EarlyStopping callback
+early_stopping = EarlyStopping(monitor='val_loss',  # Monitor the validation loss
+                               patience=10,         # Number of epochs with no improvement after which training will be stopped
+                               verbose=1,           # To display messages when the callback takes an action
+                               mode='min',          # The training will stop when the quantity monitored has stopped decreasing
+                               restore_best_weights=True)
+
+
+
+huber_loss = Huber(delta=1.0)  # Delta can be tuned
+model.compile(optimizer=Adam(learning_rate=0.001), loss=huber_loss, metrics=['mean_absolute_error'])
+
+
+
+# Train the model
+history = model.fit(X_train, y_train, epochs=1000, validation_data=(X_test, y_test), callbacks=[early_stopping])
+
+
+
+# Evaluate the model
+test_loss, test_mae = model.evaluate(X_test, y_test)
+print(f"Test Loss: {test_loss}, Test MAE: {test_mae}")
+
+
+
+
+import matplotlib.pyplot as plt
+
+# Assuming 'history' is the output from the model.fit() function
+# Plotting the loss
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)  # 1 row, 2 columns, 1st subplot
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+# Plotting the Mean Absolute Error
+plt.subplot(1, 2, 2)  # 1 row, 2 columns, 2nd subplot
+plt.plot(history.history['mean_absolute_error'], label='Training MAE')
+plt.plot(history.history['val_mean_absolute_error'], label='Validation MAE')
+plt.title('Model Mean Absolute Error')
+plt.xlabel('Epoch')
+plt.ylabel('Mean Absolute Error')
+plt.legend()
+
+plt.tight_layout()  # Adjusts plot parameters to give specified padding
+plt.show()
+
+
+
+model.save('/content/drive/MyDrive/ann_model.h5')  # Saves as an HDF5 file
+
+model.save('/content/drive/MyDrive/ann_model_default')  # Saves as a TensorFlow SavedModel (default)
