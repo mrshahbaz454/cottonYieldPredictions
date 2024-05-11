@@ -6,7 +6,7 @@ Cotton yield predictions in Pakistan using remote sensing and deep learning
 2. sentinelDataCollection
 3. landsetDataCollection
 
-**For boundriesfilelink upload .shp .shx .dbf files to Google Earth Engine Assets and update link**
+**For boundriesfilelink upload .shp .shx .dbf files to Google Earth Engine Assets and update link in all 3 files**
 
 
 **Upload cottonEstimation.ipynb to Google Colab**
